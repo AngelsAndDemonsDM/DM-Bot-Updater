@@ -24,3 +24,6 @@ def build_updater():
     subprocess.run(nuitka_command, shell=True)
 
     os.rename("updater_main.exe", BUILD_NAME)
+
+if __name__ == "__main__":
+    build_updater()
