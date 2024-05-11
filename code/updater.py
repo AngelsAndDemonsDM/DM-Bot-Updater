@@ -22,7 +22,7 @@ class Updater():
         response.raise_for_status()
         
         release_info = response.json()
-        return release_info['assets'][0]['browser_download_url'] 
+        return release_info['assets'][1]['browser_download_url'] 
 
     @staticmethod
     def check_file_in_directory(directory, filename) -> bool:

@@ -20,7 +20,7 @@ class Changelog():
         response.raise_for_status()
         
         release_info = response.json()
-        return release_info['assets'][1]['browser_download_url'] 
+        return release_info['assets'][0]['browser_download_url'] 
 
     def _download_changelog(self, file_name: str = "changelog.yaml", chunk_size: int = 8192, retries: int = 3, timeout: int = 30) -> str:
         """
