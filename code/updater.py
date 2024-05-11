@@ -6,24 +6,102 @@ import subprocess
 import pyzipper
 import requests
 from requests.exceptions import RequestException
-from server_info import ServerInfo
 
 
-class Updater(ServerInfo):
+class Updater():
     def __init__(self) -> None:
         """
         Инициализация объекта класса Updater.
-        Вызывает конструктор родительского класса ServerInfo и устанавливает текущую версию программы.
         """
-        super().__init__()
-        self._version = self.get_version()
+        pass
 
-    @property
-    def version(self) -> str:
+    @staticmethod
+    def get_latest_release_url() -> str:
+        api_url = "https://api.github.com/repos/AngelsAndDemonsDM/DM-Bot/releases/latest"
+        response = requests.get(api_url)
+        response.raise_for_status()
+        
+        release_info = response.json()
+        return release_info['assets'][0]['browser_download_url'] 
+
+    @staticmethod
+    def check_file_in_directory(directory, filename) -> bool:
         """
-        Возвращает текущую версию программы.
+        Проверяет наличие файла в указанной директории.
+
+        Args:
+            directory (str): Директория для поиска файла.
+            filename (str): Имя файла для проверки.
+
+        Returns:
+            bool: True, если файл существует; False, если файла нет.
         """
-        return self._version
+        file_path = os.path.join(directory, filename)
+
+        if os.path.exists(file_path):
+            return True
+
+        return False
+
+    def get_version_local(self, directory: str = "DM-Bot", filename: str = "main.exe") -> str:
+        """
+        Получает версию программы из указанного файла.
+
+        Args:
+            directory (str): Директория, где находится файл.
+            filename (str): Имя файла, из которого нужно получить версию.
+
+        Returns:
+            str: Версия программы, полученная из файла.
+        """
+        version = None
+
+        if self.check_file_in_directory(directory, filename):
+            result = subprocess.run([f"{directory}/{filename}", "--version"], capture_output=True, text=True)
+            if result.returncode == 0:
+                version = result.stdout.strip()
+
+        return version
+
+    @staticmethod
+    def get_version_server() -> str:
+        """
+        Получает версию программы с сервера.
+
+        Returns:
+            str: Версия программы, полученная с сервера.
+        """
+        api_url = "https://api.github.com/repos/AngelsAndDemonsDM/DM-Bot/releases/latest"
+        response = requests.get(api_url)
+        response.raise_for_status()
+
+        release_info = response.json()
+        return release_info['tag_name']
+
+    @staticmethod
+    def extract_key_from_zip(zip_file) -> bytes:
+        """
+        Извлекает ключ шифрования из архива.
+
+        Args:
+            zip_file (str): Путь к архиву.
+
+        Returns:
+            bytes: Ключ шифрования или None, если архив не зашифрован.
+        """
+        with open(zip_file, 'rb') as f:
+            
+            f.seek(-4, 2)
+            key_length_bytes = f.read(4)
+            key_length = int.from_bytes(key_length_bytes, byteorder='big', signed=False)
+            
+            if key_length == 0:
+                return None
+            
+            f.seek(-(4 + key_length), 2)
+            key = f.read(key_length)
+        
+        return key
 
     def compare_versions(self, version1: str, version2: str) -> int:
         """
@@ -61,26 +139,9 @@ class Updater(ServerInfo):
                 return -1
         return 0
     
-    def is_new_version(self) -> bool:
+    def download_latest_release(self, file_name, chunk_size=8192, retries=3, timeout=30):
         """
-        Проверяет, является ли версия на сервере новее текущей.
-
-        Raises:
-            ValueError: Если 'version' отсутствует в _info_json.
-
-        Returns:
-            bool: True, если есть новая версия; False, если версия актуальна.
-        """
-        self.raise_if_not_data("version")
-        
-        if self.compare_versions(self._info_json['version'], self._version) == 1:
-            return True
-        
-        return False
-
-    def download(self, file_name, chunk_size=8192, retries=3, timeout=30):
-        """
-        Скачивает файл с сервера.
+        Скачивает самый последний релиз с сервера GitHub.
 
         Args:
             file_name (str): Имя файла для сохранения.
@@ -94,20 +155,18 @@ class Updater(ServerInfo):
         Returns:
             str: Имя скачанного файла.
         """
-        self.raise_if_not_data("download")
-        
         for _ in range(retries):
             try:
-                with self._session.get(self._url(self._info_json['download']), stream=True, timeout=timeout) as response:
+                with requests.get(self.get_latest_release_url(), stream=True, timeout=timeout) as response:
                     response.raise_for_status()
-                    
+                        
                     with open(file_name, 'wb') as file:
                         for chunk in response.iter_content(chunk_size=chunk_size):
                             if chunk:
                                 file.write(chunk)
-                
+                    
                 return file_name
-            
+                
             except requests.Timeout:
                 logging.error(f"Timeout occurred during download. Retrying ({retries} retries left).")
             
@@ -115,7 +174,7 @@ class Updater(ServerInfo):
                 logging.error(f"Error during download: {e}. Retrying ({retries} retries left).")
         
         raise RequestException(f"Failed to download after {retries} retries.")
-
+    
     def update(self):
         """
         Обновляет программу до новой версии.
@@ -125,23 +184,15 @@ class Updater(ServerInfo):
         destination_folder = "DM-Bot"
         zip_filename = "DM-Bot.zip"
 
-        self._version = self.get_version()
-
         try:
-            is_new = self.is_new_version()
-        except Exception as err:
-            logging.error(f"Получена ошибка при попытке считать новую версию с сервера: {err}")
-            return
+            if self.compare_versions(self.get_version_server(), self.get_version_local()) != 1:
+                logging.info("Обновлений не обнаружено. У вас самая новая версия DM-Bot.")
+                return
 
-        if not is_new:
-            logging.info("Обновлений не обнаружено. У вас самая новая версия DM-Bot.")
-            return
-
-        try:
             if os.path.exists(destination_folder):
                 logging.info("Удаление старой версии")
                 for item in os.listdir(destination_folder):
-                    if item != "Data.DM-Bot":
+                    # if item != "Data.DM-Bot" or item != "":
                         item_path = os.path.join(destination_folder, item)
                         if os.path.isfile(item_path):
                             os.remove(item_path)
@@ -149,7 +200,7 @@ class Updater(ServerInfo):
                             shutil.rmtree(item_path)
 
             logging.info("Начинаю скачивать архив с сервера...")
-            self.download(file_name=zip_filename)
+            self.download_latest_release(file_name=zip_filename)
             
             logging.info("Начало распаковки...")
             password = self.extract_key_from_zip(zip_filename)
@@ -166,68 +217,3 @@ class Updater(ServerInfo):
         except Exception as err:
             logging.error(f"Получена ошибка при попытке обновления: {err}")
             return
-
-    @staticmethod
-    def check_file_in_directory(directory, filename) -> bool:
-        """
-        Проверяет наличие файла в указанной директории.
-
-        Args:
-            directory (str): Директория для поиска файла.
-            filename (str): Имя файла для проверки.
-
-        Returns:
-            bool: True, если файл существует; False, если файла нет.
-        """
-        file_path = os.path.join(directory, filename)
-
-        if os.path.exists(file_path):
-            return True
-
-        return False
-
-    @staticmethod
-    def get_version(directory: str = "DM-Bot", filename: str = "main.exe") -> str:
-        """
-        Получает версию программы из указанного файла.
-
-        Args:
-            directory (str): Директория, где находится файл.
-            filename (str): Имя файла, из которого нужно получить версию.
-
-        Returns:
-            str: Версия программы, полученная из файла.
-        """
-        version = None
-
-        if Updater.check_file_in_directory(directory, filename):
-            result = subprocess.run([f"{directory}/{filename}", "--version"], capture_output=True, text=True)
-            if result.returncode == 0:
-                version = result.stdout.strip()
-
-        return version
-
-    @staticmethod
-    def extract_key_from_zip(zip_file) -> bytes:
-        """
-        Извлекает ключ шифрования из архива.
-
-        Args:
-            zip_file (str): Путь к архиву.
-
-        Returns:
-            bytes: Ключ шифрования или None, если архив не зашифрован.
-        """
-        with open(zip_file, 'rb') as f:
-            
-            f.seek(-4, 2)
-            key_length_bytes = f.read(4)
-            key_length = int.from_bytes(key_length_bytes, byteorder='big', signed=False)
-            
-            if key_length == 0:
-                return None
-            
-            f.seek(-(4 + key_length), 2)
-            key = f.read(key_length)
-        
-        return key
