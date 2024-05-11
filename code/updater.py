@@ -13,7 +13,7 @@ class Updater():
         """
         Инициализация объекта класса Updater.
         """
-        pass
+        self._data_dirs: list = ["Data.DM-Bot"]
 
     @staticmethod
     def get_latest_release_url() -> str:
@@ -192,12 +192,16 @@ class Updater():
             if os.path.exists(destination_folder):
                 logging.info("Удаление старой версии")
                 for item in os.listdir(destination_folder):
-                    # if item != "Data.DM-Bot" or item != "":
-                        item_path = os.path.join(destination_folder, item)
-                        if os.path.isfile(item_path):
-                            os.remove(item_path)
-                        elif os.path.isdir(item_path):
-                            shutil.rmtree(item_path)
+                    if item in self._data_dirs:
+                        continue
+
+                    item_path = os.path.join(destination_folder, item)
+                    
+                    if os.path.isfile(item_path):
+                        os.remove(item_path)
+                    
+                    elif os.path.isdir(item_path):
+                        shutil.rmtree(item_path)
 
             logging.info("Начинаю скачивать архив с сервера...")
             self.download_latest_release(file_name=zip_filename)
