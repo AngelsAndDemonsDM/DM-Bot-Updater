@@ -4,18 +4,25 @@ import os
 import requests
 import yaml
 from requests.exceptions import RequestException
-from server_info import ServerInfo
 
 
-class Changelog(ServerInfo):
+class Changelog():
     def __init__(self) -> None:
         """
         Инициализация объекта класса Changelog.
-        Вызывает конструктор родительского класса ServerInfo.
         """
-        super().__init__()
+        pass
     
-    def download_changelog(self, file_name="changelog.yaml", chunk_size=8192, retries=3, timeout=30):
+    @staticmethod
+    def get_latest_release_url() -> str:
+        api_url = "https://api.github.com/repos/AngelsAndDemonsDM/DM-Bot/releases/latest"
+        response = requests.get(api_url)
+        response.raise_for_status()
+        
+        release_info = response.json()
+        return release_info['assets'][1]['browser_download_url'] 
+
+    def _download_changelog(self, file_name: str = "changelog.yaml", chunk_size: int = 8192, retries: int = 3, timeout: int = 30) -> str:
         """
         Скачивает ченджлог с сервера.
 
@@ -31,11 +38,9 @@ class Changelog(ServerInfo):
         Returns:
             str: Имя скачанного файла ченджлога.
         """
-        self.raise_if_not_data("changelog_id")
-        
         for _ in range(retries):
             try:
-                with self._session.get(self._url(self._info_json['changelog_id']), stream=True, timeout=timeout) as response:
+                with requests.get(self.get_latest_release_url(), stream=True, timeout=timeout) as response:
                     response.raise_for_status()
                     
                     with open(file_name, 'wb') as file:
@@ -69,7 +74,7 @@ class Changelog(ServerInfo):
         выводится соответствующее сообщение.
         """
         try:
-            file_name = self.download_changelog()
+            file_name = self._download_changelog()
             with open(file_name, 'r', encoding='utf-8') as file:
                 changelog_data = yaml.safe_load(file)
             
