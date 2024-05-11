@@ -59,7 +59,7 @@ def main() -> None:
     changelog_class = Changelog()
     while True:
         clear_consol()
-        menu = show_menu(update_class.version)
+        menu = show_menu(update_class.get_version_local())
 
         match menu:
             case 1: # Обновить программу
