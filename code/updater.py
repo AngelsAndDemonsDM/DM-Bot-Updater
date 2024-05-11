@@ -153,6 +153,7 @@ class Updater(ServerInfo):
             
             logging.info("Начало распаковки...")
             password = self.extract_key_from_zip(zip_filename)
+
             with pyzipper.AESZipFile(zip_filename, 'r') as zip_ref:
                 zip_ref.setpassword(password)
                 zip_ref.extractall(os.getcwd())
@@ -215,12 +216,17 @@ class Updater(ServerInfo):
             zip_file (str): Путь к архиву.
 
         Returns:
-            bytes: Ключ шифрования.
+            bytes: Ключ шифрования или None, если архив не зашифрован.
         """
         with open(zip_file, 'rb') as f:
+            
             f.seek(-4, 2)
             key_length_bytes = f.read(4)
             key_length = int.from_bytes(key_length_bytes, byteorder='big', signed=False)
+            
+            if key_length == 0:
+                return None
+            
             f.seek(-(4 + key_length), 2)
             key = f.read(key_length)
         
