@@ -1,0 +1,3 @@
+[submodule "DM-Bot"]
+	path = DM-Bot
+	url = https://github.com/AngelsAndDemonsDM/DM-Bot.git
